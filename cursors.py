@@ -1,42 +1,601 @@
-#!/usr/bin/env python
-""" pygame.examples.cursors
-Click a button and the cursor will change.
-This example will show you:
-*The different types of cursors that exist
-*How to create a cursor
-*How to set a cursor
-*How to make a simple button
+#    pygame - Python Game Library
+#    Copyright (C) 2000-2003  Pete Shinners
+#
+#    This library is free software; you can redistribute it and/or
+#    modify it under the terms of the GNU Library General Public
+#    License as published by the Free Software Foundation; either
+#    version 2 of the License, or (at your option) any later version.
+#
+#    This library is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#    Library General Public License for more details.
+#
+#    You should have received a copy of the GNU Library General Public
+#    License along with this library; if not, write to the Free
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+#    Pete Shinners
+#    pete@shinners.org
+
+"""Set of cursor resources available for use. These cursors come
+in a sequence of values that are needed as the arguments for
+pygame.mouse.set_cursor(). To dereference the sequence in place
+and create the cursor in one step, call like this:
+    pygame.mouse.set_cursor(*pygame.cursors.arrow).
+
+Here is a list of available cursors:
+    arrow, diamond, ball, broken_x, tri_left, tri_right
+
+There is also a sample string cursor named 'thickarrow_strings'.
+The compile() function can convert these string cursors into cursor byte data that can be used to
+create Cursor objects.
+
+Alternately, you can also create Cursor objects using surfaces or cursors constants,
+such as pygame.SYSTEM_CURSOR_ARROW.
 """
 
-import pygame as pg
-import os
+import pygame
+
+_cursor_id_table = {
+    pygame.SYSTEM_CURSOR_ARROW: "SYSTEM_CURSOR_ARROW",
+    pygame.SYSTEM_CURSOR_IBEAM: "SYSTEM_CURSOR_IBEAM",
+    pygame.SYSTEM_CURSOR_WAIT: "SYSTEM_CURSOR_WAIT",
+    pygame.SYSTEM_CURSOR_CROSSHAIR: "SYSTEM_CURSOR_CROSSHAIR",
+    pygame.SYSTEM_CURSOR_WAITARROW: "SYSTEM_CURSOR_WAITARROW",
+    pygame.SYSTEM_CURSOR_SIZENWSE: "SYSTEM_CURSOR_SIZENWSE",
+    pygame.SYSTEM_CURSOR_SIZENESW: "SYSTEM_CURSOR_SIZENESW",
+    pygame.SYSTEM_CURSOR_SIZEWE: "SYSTEM_CURSOR_SIZEWE",
+    pygame.SYSTEM_CURSOR_SIZENS: "SYSTEM_CURSOR_SIZENS",
+    pygame.SYSTEM_CURSOR_SIZEALL: "SYSTEM_CURSOR_SIZEALL",
+    pygame.SYSTEM_CURSOR_NO: "SYSTEM_CURSOR_NO",
+    pygame.SYSTEM_CURSOR_HAND: "SYSTEM_CURSOR_HAND",
+}
 
 
-# Create a system cursor
+class Cursor:
+    def __init__(self, *args):
+        """Cursor(size, hotspot, xormasks, andmasks) -> Cursor
+        Cursor(hotspot, Surface) -> Cursor
+        Cursor(constant) -> Cursor
+        Cursor(Cursor) -> copies the Cursor object passed as an argument
+        Cursor() -> Cursor
 
-system_cursor1 = pg.SYSTEM_CURSOR_CROSSHAIR
-system_cursor2 = pg.SYSTEM_CURSOR_HAND
-system_cursor3 = pg.SYSTEM_CURSOR_IBEAM
+        pygame object for representing cursors
+
+        You can initialize a cursor from a system cursor or use the
+        constructor on an existing Cursor object, which will copy it.
+        Providing a Surface instance will render the cursor displayed
+        as that Surface when used.
+
+        These Surfaces may use other colors than black and white."""
+        if len(args) == 0:
+            self.type = "system"
+            self.data = (pygame.SYSTEM_CURSOR_ARROW,)
+        elif len(args) == 1 and args[0] in _cursor_id_table:
+            self.type = "system"
+            self.data = (args[0],)
+        elif len(args) == 1 and isinstance(args[0], Cursor):
+            self.type = args[0].type
+            self.data = args[0].data
+        elif (
+            len(args) == 2 and len(args[0]) == 2 and isinstance(args[1], pygame.Surface)
+        ):
+            self.type = "color"
+            self.data = tuple(args)
+        elif len(args) == 4 and len(args[0]) == 2 and len(args[1]) == 2:
+            self.type = "bitmap"
+            # pylint: disable=consider-using-generator
+            # See https://github.com/pygame/pygame/pull/2509 for analysis
+            self.data = tuple(tuple(arg) for arg in args)
+        else:
+            raise TypeError("Arguments must match a cursor specification")
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __eq__(self, other):
+        return isinstance(other, Cursor) and self.data == other.data
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __copy__(self):
+        """Clone the current Cursor object.
+        You can do the same thing by doing Cursor(Cursor)."""
+        return self.__class__(self)
+
+    copy = __copy__
+
+    def __hash__(self):
+        return hash(tuple([self.type] + list(self.data)))
+
+    def __repr__(self):
+        if self.type == "system":
+            id_string = _cursor_id_table.get(self.data[0], "constant lookup error")
+            return f"<Cursor(type: system, constant: {id_string})>"
+        if self.type == "bitmap":
+            size = f"size: {self.data[0]}"
+            hotspot = f"hotspot: {self.data[1]}"
+            return f"<Cursor(type: bitmap, {size}, {hotspot})>"
+        if self.type == "color":
+            hotspot = f"hotspot: {self.data[0]}"
+            surf = repr(self.data[1])
+            return f"<Cursor(type: color, {hotspot}, surf: {surf})>"
+        raise TypeError("Invalid Cursor")
 
 
-# Create a color cursor
+# Python side of the set_cursor function: C side in mouse.c
+def set_cursor(*args):
+    """set_cursor(pygame.cursors.Cursor OR args for a pygame.cursors.Cursor) -> None
+    set the mouse cursor to a new cursor"""
+    cursor = Cursor(*args)
+    pygame.mouse._set_cursor(**{cursor.type: cursor.data})
 
-surf = pg.Surface((40, 40))
-surf.fill((120, 50, 50))
-color_cursor = pg.cursors.Cursor((20, 20), surf)
+
+pygame.mouse.set_cursor = set_cursor
+del set_cursor  # cleanup namespace
 
 
-# Create a color cursor with an image surface
+# Python side of the get_cursor function: C side in mouse.c
+def get_cursor():
+    """get_cursor() -> pygame.cursors.Cursor
+    get the current mouse cursor"""
+    return Cursor(*pygame.mouse._get_cursor())
 
-main_dir = os.path.split(os.path.abspath(__file__))[0]
-image_name = os.path.join(main_dir, "data", "cursor.png")
-image = pg.image.load(image_name)
-image_cursor = pg.cursors.Cursor(
-    (image.get_width() // 2, image.get_height() // 2), image
+
+pygame.mouse.get_cursor = get_cursor
+del get_cursor  # cleanup namespace
+
+arrow = Cursor(
+    (16, 16),
+    (0, 0),
+    (
+        0x00,
+        0x00,
+        0x40,
+        0x00,
+        0x60,
+        0x00,
+        0x70,
+        0x00,
+        0x78,
+        0x00,
+        0x7C,
+        0x00,
+        0x7E,
+        0x00,
+        0x7F,
+        0x00,
+        0x7F,
+        0x80,
+        0x7C,
+        0x00,
+        0x6C,
+        0x00,
+        0x46,
+        0x00,
+        0x06,
+        0x00,
+        0x03,
+        0x00,
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+    ),
+    (
+        0x40,
+        0x00,
+        0xE0,
+        0x00,
+        0xF0,
+        0x00,
+        0xF8,
+        0x00,
+        0xFC,
+        0x00,
+        0xFE,
+        0x00,
+        0xFF,
+        0x00,
+        0xFF,
+        0x80,
+        0xFF,
+        0xC0,
+        0xFF,
+        0x80,
+        0xFE,
+        0x00,
+        0xEF,
+        0x00,
+        0x4F,
+        0x00,
+        0x07,
+        0x80,
+        0x07,
+        0x80,
+        0x03,
+        0x00,
+    ),
+)
+
+diamond = Cursor(
+    (16, 16),
+    (7, 7),
+    (
+        0,
+        0,
+        1,
+        0,
+        3,
+        128,
+        7,
+        192,
+        14,
+        224,
+        28,
+        112,
+        56,
+        56,
+        112,
+        28,
+        56,
+        56,
+        28,
+        112,
+        14,
+        224,
+        7,
+        192,
+        3,
+        128,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ),
+    (
+        1,
+        0,
+        3,
+        128,
+        7,
+        192,
+        15,
+        224,
+        31,
+        240,
+        62,
+        248,
+        124,
+        124,
+        248,
+        62,
+        124,
+        124,
+        62,
+        248,
+        31,
+        240,
+        15,
+        224,
+        7,
+        192,
+        3,
+        128,
+        1,
+        0,
+        0,
+        0,
+    ),
+)
+
+ball = Cursor(
+    (16, 16),
+    (7, 7),
+    (
+        0,
+        0,
+        3,
+        192,
+        15,
+        240,
+        24,
+        248,
+        51,
+        252,
+        55,
+        252,
+        127,
+        254,
+        127,
+        254,
+        127,
+        254,
+        127,
+        254,
+        63,
+        252,
+        63,
+        252,
+        31,
+        248,
+        15,
+        240,
+        3,
+        192,
+        0,
+        0,
+    ),
+    (
+        3,
+        192,
+        15,
+        240,
+        31,
+        248,
+        63,
+        252,
+        127,
+        254,
+        127,
+        254,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
+        127,
+        254,
+        127,
+        254,
+        63,
+        252,
+        31,
+        248,
+        15,
+        240,
+        3,
+        192,
+    ),
+)
+
+broken_x = Cursor(
+    (16, 16),
+    (7, 7),
+    (
+        0,
+        0,
+        96,
+        6,
+        112,
+        14,
+        56,
+        28,
+        28,
+        56,
+        12,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        12,
+        48,
+        28,
+        56,
+        56,
+        28,
+        112,
+        14,
+        96,
+        6,
+        0,
+        0,
+    ),
+    (
+        224,
+        7,
+        240,
+        15,
+        248,
+        31,
+        124,
+        62,
+        62,
+        124,
+        30,
+        120,
+        14,
+        112,
+        0,
+        0,
+        0,
+        0,
+        14,
+        112,
+        30,
+        120,
+        62,
+        124,
+        124,
+        62,
+        248,
+        31,
+        240,
+        15,
+        224,
+        7,
+    ),
+)
+
+tri_left = Cursor(
+    (16, 16),
+    (1, 1),
+    (
+        0,
+        0,
+        96,
+        0,
+        120,
+        0,
+        62,
+        0,
+        63,
+        128,
+        31,
+        224,
+        31,
+        248,
+        15,
+        254,
+        15,
+        254,
+        7,
+        128,
+        7,
+        128,
+        3,
+        128,
+        3,
+        128,
+        1,
+        128,
+        1,
+        128,
+        0,
+        0,
+    ),
+    (
+        224,
+        0,
+        248,
+        0,
+        254,
+        0,
+        127,
+        128,
+        127,
+        224,
+        63,
+        248,
+        63,
+        254,
+        31,
+        255,
+        31,
+        255,
+        15,
+        254,
+        15,
+        192,
+        7,
+        192,
+        7,
+        192,
+        3,
+        192,
+        3,
+        192,
+        1,
+        128,
+    ),
+)
+
+tri_right = Cursor(
+    (16, 16),
+    (14, 1),
+    (
+        0,
+        0,
+        0,
+        6,
+        0,
+        30,
+        0,
+        124,
+        1,
+        252,
+        7,
+        248,
+        31,
+        248,
+        127,
+        240,
+        127,
+        240,
+        1,
+        224,
+        1,
+        224,
+        1,
+        192,
+        1,
+        192,
+        1,
+        128,
+        1,
+        128,
+        0,
+        0,
+    ),
+    (
+        0,
+        7,
+        0,
+        31,
+        0,
+        127,
+        1,
+        254,
+        7,
+        254,
+        31,
+        252,
+        127,
+        252,
+        255,
+        248,
+        255,
+        248,
+        127,
+        240,
+        3,
+        240,
+        3,
+        224,
+        3,
+        224,
+        3,
+        192,
+        3,
+        192,
+        1,
+        128,
+    ),
 )
 
 
-# Create a bitmap cursor from simple strings
+# Here is an example string resource cursor. To use this:
+#    curs, mask = pygame.cursors.compile_cursor(pygame.cursors.thickarrow_strings, 'X', '.')
+#    pygame.mouse.set_cursor((24, 24), (0, 0), curs, mask)
+# Be warned, though, that cursors created from compiled strings do not support colors.
 
 # sized 24x24
 thickarrow_strings = (
@@ -66,194 +625,213 @@ thickarrow_strings = (
     "                        ",
 )
 
-bitmap_cursor1 = pg.cursors.Cursor(
-    (24, 24),
-    (0, 0),
-    *pg.cursors.compile(thickarrow_strings, black="X", white=".", xor="o"),
+# sized 24x16
+sizer_x_strings = (
+    "     X      X           ",
+    "    XX      XX          ",
+    "   X.X      X.X         ",
+    "  X..X      X..X        ",
+    " X...XXXXXXXX...X       ",
+    "X................X      ",
+    " X...XXXXXXXX...X       ",
+    "  X..X      X..X        ",
+    "   X.X      X.X         ",
+    "    XX      XX          ",
+    "     X      X           ",
+    "                        ",
+    "                        ",
+    "                        ",
+    "                        ",
+    "                        ",
+)
+
+# sized 16x24
+sizer_y_strings = (
+    "     X          ",
+    "    X.X         ",
+    "   X...X        ",
+    "  X.....X       ",
+    " X.......X      ",
+    "XXXXX.XXXXX     ",
+    "    X.X         ",
+    "    X.X         ",
+    "    X.X         ",
+    "    X.X         ",
+    "    X.X         ",
+    "    X.X         ",
+    "    X.X         ",
+    "XXXXX.XXXXX     ",
+    " X.......X      ",
+    "  X.....X       ",
+    "   X...X        ",
+    "    X.X         ",
+    "     X          ",
+    "                ",
+    "                ",
+    "                ",
+    "                ",
+    "                ",
+)
+
+# sized 24x16
+sizer_xy_strings = (
+    "XXXXXXXX                ",
+    "X.....X                 ",
+    "X....X                  ",
+    "X...X                   ",
+    "X..X.X                  ",
+    "X.X X.X                 ",
+    "XX   X.X    X           ",
+    "X     X.X  XX           ",
+    "       X.XX.X           ",
+    "        X...X           ",
+    "        X...X           ",
+    "       X....X           ",
+    "      X.....X           ",
+    "     XXXXXXXX           ",
+    "                        ",
+    "                        ",
+)
+
+# sized 8x16
+textmarker_strings = (
+    "ooo ooo ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "   o    ",
+    "ooo ooo ",
+    "        ",
+    "        ",
+    "        ",
+    "        ",
 )
 
 
-# Create a bitmap cursor from premade simple strings
+def compile(strings, black="X", white=".", xor="o"):
+    """pygame.cursors.compile(strings, black, white, xor) -> data, mask
+    compile cursor strings into cursor data
 
-bitmap_cursor2 = pg.cursors.diamond
+    This takes a set of strings with equal length and computes
+    the binary data for that cursor. The string widths must be
+    divisible by 8.
 
+    The black and white arguments are single letter strings that
+    tells which characters will represent black pixels, and which
+    characters represent white pixels. All other characters are
+    considered clear.
 
-# Calculate if mouse position is inside circle
-def check_circle(mouse_pos_x, mouse_pos_y, center_x, center_y, radius):
-    return (mouse_pos_x - center_x) ** 2 + (mouse_pos_y - center_y) ** 2 < radius**2
+    Some systems allow you to set a special toggle color for the
+    system color, this is also called the xor color. If the system
+    does not support xor cursors, that color will simply be black.
 
+    This returns a tuple containing the cursor data and cursor mask
+    data. Both these arguments are used when setting a cursor with
+    pygame.mouse.set_cursor().
+    """
+    # first check for consistent lengths
+    size = len(strings[0]), len(strings)
+    if size[0] % 8 or size[1] % 8:
+        raise ValueError(f"cursor string sizes must be divisible by 8 {size}")
 
-def main():
-    pg.init()
-    pg.display.set_caption("Cursors Example")
+    for s in strings[1:]:
+        if len(s) != size[0]:
+            raise ValueError("Cursor strings are inconsistent lengths")
 
-    pg.font.init()
-    font = pg.font.Font(None, 30)
-    font1 = pg.font.Font(None, 24)
+    # create the data arrays.
+    # this could stand a little optimizing
+    maskdata = []
+    filldata = []
+    maskitem = fillitem = 0
+    step = 8
+    for s in strings:
+        for c in s:
+            maskitem = maskitem << 1
+            fillitem = fillitem << 1
+            step = step - 1
+            if c == black:
+                maskitem = maskitem | 1
+                fillitem = fillitem | 1
+            elif c == white:
+                maskitem = maskitem | 1
+            elif c == xor:
+                fillitem = fillitem | 1
 
-    bg = pg.display.set_mode((500, 400))
-    bg.fill((183, 201, 226))
+            if not step:
+                maskdata.append(maskitem)
+                filldata.append(fillitem)
+                maskitem = fillitem = 0
+                step = 8
 
-    # Initialize circles
-    radius1 = 40
-    radius2 = 40
-    radius3 = 40
-    radius4 = 40
-    radius5 = 40
-    radius6 = 40
-    radius7 = 40
-
-    pos_x1 = 82
-    pos_x2 = 138
-    pos_x3 = 194
-    pos_x4 = 250
-    pos_x5 = 306
-    pos_x6 = 362
-    pos_x7 = 418
-
-    pos_y1 = 140
-    pos_y2 = 220
-    pos_y3 = 140
-    pos_y4 = 220
-    pos_y5 = 140
-    pos_y6 = 220
-    pos_y7 = 140
-
-    circle1 = pg.draw.circle(bg, (255, 255, 255), (pos_x1, pos_y1), radius1)
-    circle2 = pg.draw.circle(bg, (255, 255, 255), (pos_x2, pos_y2), radius2)
-    circle3 = pg.draw.circle(bg, (255, 255, 255), (pos_x3, pos_y3), radius3)
-    circle4 = pg.draw.circle(bg, (255, 255, 255), (pos_x4, pos_y4), radius4)
-    circle5 = pg.draw.circle(bg, (255, 255, 255), (pos_x5, pos_y5), radius5)
-    circle6 = pg.draw.circle(bg, (255, 255, 255), (pos_x6, pos_y6), radius6)
-    circle7 = pg.draw.circle(bg, (255, 255, 255), (pos_x7, pos_y7), radius7)
-
-    # Initialize button
-    button_text = font1.render("Click here to change cursor", True, (0, 0, 0))
-    button = pg.draw.rect(
-        bg,
-        (180, 180, 180),
-        (139, 300, button_text.get_width() + 5, button_text.get_height() + 50),
-    )
-    button_text_rect = button_text.get_rect(center=button.center)
-    bg.blit(button_text, button_text_rect)
-
-    pg.display.update()
-
-    cursors = [
-        system_cursor1,
-        color_cursor,
-        system_cursor2,
-        image_cursor,
-        system_cursor3,
-        bitmap_cursor1,
-        bitmap_cursor2,
-    ]
-
-    index = 0
-    pg.mouse.set_cursor(cursors[index])
-
-    pressed = False
-    clock = pg.time.Clock()
-
-    while True:
-        clock.tick(50)
-
-        mouse_x, mouse_y = pg.mouse.get_pos()
-
-        # Check if mouse is inside a circle to change its color
-        if check_circle(mouse_x, mouse_y, circle1.centerx, circle1.centery, radius1):
-            circle1 = pg.draw.circle(bg, (255, 0, 0), (pos_x1, pos_y1), radius1)
-        else:
-            circle1 = pg.draw.circle(bg, (255, 255, 255), (pos_x1, pos_y1), radius1)
-
-        if check_circle(mouse_x, mouse_y, circle2.centerx, circle2.centery, radius2):
-            circle2 = pg.draw.circle(bg, (255, 127, 0), (pos_x2, pos_y2), radius2)
-        else:
-            circle2 = pg.draw.circle(bg, (255, 255, 255), (pos_x2, pos_y2), radius2)
-
-        if check_circle(mouse_x, mouse_y, circle3.centerx, circle3.centery, radius3):
-            circle3 = pg.draw.circle(bg, (255, 255, 0), (pos_x3, pos_y3), radius3)
-        else:
-            circle3 = pg.draw.circle(bg, (255, 255, 255), (pos_x3, pos_y3), radius3)
-
-        if check_circle(mouse_x, mouse_y, circle4.centerx, circle4.centery, radius3):
-            circle4 = pg.draw.circle(bg, (0, 255, 0), (pos_x4, pos_y4), radius4)
-        else:
-            circle4 = pg.draw.circle(bg, (255, 255, 255), (pos_x4, pos_y4), radius4)
-
-        if check_circle(mouse_x, mouse_y, circle5.centerx, circle5.centery, radius4):
-            circle5 = pg.draw.circle(bg, (0, 0, 255), (pos_x5, pos_y5), radius5)
-        else:
-            circle5 = pg.draw.circle(bg, (255, 255, 255), (pos_x5, pos_y5), radius5)
-
-        if check_circle(mouse_x, mouse_y, circle6.centerx, circle6.centery, radius6):
-            circle6 = pg.draw.circle(bg, (75, 0, 130), (pos_x6, pos_y6), radius6)
-        else:
-            circle6 = pg.draw.circle(bg, (255, 255, 255), (pos_x6, pos_y6), radius6)
-
-        if check_circle(mouse_x, mouse_y, circle7.centerx, circle7.centery, radius7):
-            circle7 = pg.draw.circle(bg, (148, 0, 211), (pos_x7, pos_y7), radius7)
-        else:
-            circle7 = pg.draw.circle(bg, (255, 255, 255), (pos_x7, pos_y7), radius7)
-
-        bg.fill((183, 201, 226), (0, 15, bg.get_width(), 50))
-        text1 = font.render(
-            (f"This is a {pg.mouse.get_cursor().type} cursor"), True, (0, 0, 0)
-        )
-        text_rect1 = text1.get_rect(center=(bg.get_width() / 2, 40))
-        bg.blit(text1, text_rect1)
-
-        button = pg.draw.rect(
-            bg,
-            (100, 149, 240),
-            (139, 300, button_text.get_width() + 5, button_text.get_height() + 50),
-        )
-        bg.blit(button_text, button_text_rect)
-
-        # Check if button was clicked and change cursor
-        if button.collidepoint(mouse_x, mouse_y):
-            button = pg.draw.rect(
-                bg,
-                (60, 100, 255),
-                (
-                    139,
-                    300,
-                    button_text.get_width() + 5,
-                    button_text.get_height() + 50,
-                ),
-            )
-            bg.blit(button_text, button_text_rect)
-
-            if pg.mouse.get_pressed()[0] == 1 and pressed is False:
-                button = pg.draw.rect(
-                    bg,
-                    (0, 0, 139),
-                    (
-                        139,
-                        300,
-                        button_text.get_width() + 5,
-                        button_text.get_height() + 50,
-                    ),
-                )
-                bg.blit(button_text, button_text_rect)
-                index += 1
-                index %= len(cursors)
-                pg.mouse.set_cursor(cursors[index])
-                pg.display.update()
-                pg.time.delay(40)
-
-        if pg.mouse.get_pressed()[0] == 1:
-            pressed = True
-        elif pg.mouse.get_pressed()[0] == 0:
-            pressed = False
-
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                raise SystemExit
-
-        pg.display.update()
+    return tuple(filldata), tuple(maskdata)
 
 
-if __name__ == "__main__":
-    main()
+def load_xbm(curs, mask):
+    """pygame.cursors.load_xbm(cursorfile, maskfile) -> cursor_args
+    reads a pair of XBM files into set_cursor arguments
+
+    Arguments can either be filenames or filelike objects
+    with the readlines method. Not largely tested, but
+    should work with typical XBM files.
+    """
+
+    def bitswap(num):
+        val = 0
+        for x in range(8):
+            b = num & (1 << x) != 0
+            val = val << 1 | b
+        return val
+
+    if hasattr(curs, "readlines"):
+        curs = curs.readlines()
+    else:
+        with open(curs, encoding="ascii") as cursor_f:
+            curs = cursor_f.readlines()
+
+    if hasattr(mask, "readlines"):
+        mask = mask.readlines()
+    else:
+        with open(mask, encoding="ascii") as mask_f:
+            mask = mask_f.readlines()
+
+    # avoid comments
+    for i, line in enumerate(curs):
+        if line.startswith("#define"):
+            curs = curs[i:]
+            break
+
+    for i, line in enumerate(mask):
+        if line.startswith("#define"):
+            mask = mask[i:]
+            break
+
+    # load width,height
+    width = int(curs[0].split()[-1])
+    height = int(curs[1].split()[-1])
+    # load hotspot position
+    if curs[2].startswith("#define"):
+        hotx = int(curs[2].split()[-1])
+        hoty = int(curs[3].split()[-1])
+    else:
+        hotx = hoty = 0
+
+    info = width, height, hotx, hoty
+
+    possible_starts = ("static char", "static unsigned char")
+    for i, line in enumerate(curs):
+        if line.startswith(possible_starts):
+            break
+    data = " ".join(curs[i + 1 :]).replace("};", "").replace(",", " ")
+    cursdata = tuple(bitswap(int(x, 16)) for x in data.split())
+    for i, line in enumerate(mask):
+        if line.startswith(possible_starts):
+            break
+    data = " ".join(mask[i + 1 :]).replace("};", "").replace(",", " ")
+    maskdata = tuple(bitswap(int(x, 16)) for x in data.split())
+    return info[:2], info[2:], cursdata, maskdata
